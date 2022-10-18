@@ -1,0 +1,20 @@
+{% macro handle_string(struct_name, opt) -%}
+{{struct_name}}.{{opt.long}} = value;
+{%- endmacro %}
+
+{% macro handle_int(struct_name, opt) -%}
+{
+    char *endptr;
+    {{struct_name}}.{{opt.long}} = strtol(value, &endptr, 0);
+    if(*endptr) {
+        {# issue warning #}
+        fprintf(stderr, "invalid integer for option --{{opt.long}}\n");
+        return -1;
+    }
+}
+{%- endmacro %}
+
+{% macro handle_bool(struct_name, opt) -%}
+{{struct_name}}.{{opt.long}} = 1;
+used_extra = 0;
+{%- endmacro %}

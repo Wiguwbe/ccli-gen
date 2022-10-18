@@ -1,0 +1,230 @@
+
+{% import "macros.j2" as m %}
+
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+
+#include "{{basename}}.h"
+
+{# structs , recursively generate structs? #}
+
+{% for cmd in cmds %}
+struct {{ cmd.get_fullname() }}_args {
+    {% for opt in cmd.options %}
+    {{ ctype_conversion[opt.ctype.value] }} {{opt.long}};
+    {% endfor %}
+};
+{% endfor %}
+
+{# helper _get_extra_args(...) #}
+void _get_extra_args(int *argc, char**argv)
+{
+    int count = 0;
+    int placer = 0;
+    for(int runner = 0; runner < *argc; runner++) {
+        if(argv[runner]) {
+            argv[placer++] = argv[runner];
+            count++;
+        }
+    }
+    *argc = count;
+}
+
+{# function definitions first? #}
+{% for cmd in cmds %}
+int _parse_{{ cmd.get_fullname() }}(
+    int argc,
+    char**argv
+    {% for pcmd in cmd.get_parent_list() %}
+    , struct {{pcmd.get_fullname()}}_args {{pcmd.get_fullname()}}_args
+    {% endfor %}
+);
+{% endfor %}
+
+{# function implementations #}
+{% for cmd in cmds %}
+int _parse_{{ cmd.get_fullname() }}(int argc, char**argv{%for pcmd in cmd.get_parent_list()%}, struct {{pcmd.get_fullname()}}_args {{pcmd.get_fullname()}}_args{%endfor%})
+{
+    {# our data #}
+    struct {{cmd.get_fullname()}}_args {{cmd.get_fullname()}}_args = {
+        {% for opt in cmd.options %}
+        {{ctype_nil[opt.ctype.value]}},
+        {% endfor %}
+    };
+
+    for(int i=0; i<argc; i++) {
+        int used_extra = 0;
+        char *ptr = argv[i];
+        if(!ptr) {
+            continue;
+        }
+        char *value;
+        if(ptr[0] == '-') {
+            if(ptr[1] == '-') {
+                int opt_len = strlen(ptr+2);
+                char *eq = strchr(ptr+2, '=');
+                if(eq) {
+                    opt_len = eq-ptr-2;
+                    value = eq+1;
+                } else {
+                    value = argv[i+1];
+                    used_extra = 1;
+                }
+                {# our options first #}
+                {% for opt in cmd.long_options %}
+                if(!strncmp(ptr+2, "{{opt.long}}", opt_len)) {
+                    goto _{{opt.long}}_opt;
+                }
+                {% endfor %}
+                {# parents' options #}
+                {% for pcmd in cmd.get_parent_list(True) %}
+                {% for opt in pcmd.long_options %}
+                if(!strncmp(ptr+2, "{{opt.long}}", opt_len)) {
+                    goto _{{pcmd.get_fullname()}}_{{opt.long}}_opt;
+                }
+                {% endfor %}
+                {% endfor %}
+            } else {
+                if(strlen(ptr)>2) {
+                    value = ptr+2;
+                } else {
+                    value = argv[i+1];
+                    used_extra = 1;
+                }
+                switch(ptr[1]) {
+                    {# our options #}
+                    {% for opt in cmd.short_options %}
+                    case '{{opt.short}}': goto _{{opt.long}}_opt;
+                    {% endfor %}
+                    {# parents's options #}
+                    {% for pcmd in cmd.get_parent_list() %}
+                    {% for opt in pcmd.short_options %}
+                    case '{{opt.short}}': goto _{{pcmd.get_fullname()}}_{{opt.long}}_opt;
+                    {% endfor %}
+                    {% endfor %}
+                }
+            }
+        } else {
+            {# arg/sub-command #}
+            char *save = argv[i];
+            argv[i] = NULL;
+            {% for scmd in cmd.sub_cmds %}
+            if(!strcmp(ptr, "{{scmd.name}}")) {
+                return _parse_{{scmd.get_fullname()}}(
+                    argc, argv
+                    {% for p in scmd.get_parent_list() %}
+                    , {{p.get_fullname()}}_args
+                    {% endfor %}
+                );
+            }
+            {% endfor %}
+            {# not handled #}
+            argv[i] = save;
+        }
+
+        {# option/arg not handled #}
+        continue;
+
+        {# handler for our options #}
+        {% for opt in cmd.options %}
+    _{{opt.long}}_opt:
+        {% if opt.ctype.value == 0 %}
+        {{ m.handle_string(cmd.get_fullname()+"_args", opt) | indent(8)}}
+        {% elif opt.ctype.value == 1 %}
+        {{ m.handle_int(cmd.get_fullname()+"_args", opt) | indent(8) }}
+        {% else %}
+        {{ m.handle_bool(cmd.get_fullname()+"_args", opt) | indent(8) }}
+        {% endif %}
+        goto _{{cmd.get_fullname()}}_continue;
+        {% endfor %}
+        {# handler for parent's options #}
+        {% for pcmd in cmd.get_parent_list(True) %}
+        {% for opt in pcmd.options %}
+    _{{pcmd.get_fullname()}}_{{opt.long}}_opt:
+        {% if opt.ctype.value == 0 %}
+        {{ m.handle_string(pcmd.get_fullname()+"_args", opt) | indent(8)}}
+        {% elif opt.ctype.value == 1 %}
+        {{ m.handle_int(pcmd.get_fullname()+"_args", opt) | indent(8) }}
+        {% else %}
+        {{ m.handle_bool(pcmd.get_fullname()+"_args", opt) | indent(8) }}
+        {% endif %}
+        goto _{{cmd.get_fullname()}}_continue;
+        {% endfor %}
+        {% endfor %}
+
+
+    _{{cmd.get_fullname()}}_continue:
+        argv[i] = NULL;
+        if(used_extra) {
+            argv[++i] = NULL;
+        }
+    }
+
+    {# TODO parse env #}
+    {# our env params #}
+    {% for opt in cmd.env_options %}
+    {# if it's not already set #}
+    if({{cmd.get_fullname()}}_args.{{opt.long}} == {{ctype_nil[opt.ctype.value]}}) {
+        char *value = getenv("{{opt.env}}");
+        if(value&&*value) {
+            {#env is found and it's not empty #}
+            {% if opt.ctype.value == 0 %}
+            {{ m.handle_string(cmd.get_fullname()+"_args", opt) | indent(12) }}
+            {% elif opt.ctype.value == 1 %}
+            {{ m.handle_int(cmd.get_fullname()+"_args", opt) | indent(12) }}
+            {% else %}
+            {{ m.handle_bool(cmd.get_fullname()+"_args", opt) | indent(12) }}
+            {% endif %}
+        }
+    }
+    {% endfor %}
+    {# parents' env params #}
+    {% for pcmd in cmd.get_parent_list(True) %}
+    {% for opt in pcmd.env_options %}
+    if({{pcmd.get_fullname()}}_args.{{opt.long}} == {{ctype_nil[opt.ctype.value]}}) {
+        char *value = getenv("{{opt.env}}");
+        if(value&&*value) {
+            {#env is found and it's not empty #}
+            {% if opt.ctype.value == 0 %}
+            {{ m.handle_string(pcmd.get_fullname()+"_args", opt) | indent(12) }}
+            {% elif opt.ctype.value == 1 %}
+            {{ m.handle_int(pcmd.get_fullname()+"_args", opt) | indent(12) }}
+            {% else %}
+            {{ m.handle_bool(pcmd.get_fullname()+"_args", opt) | indent(12) }}
+            {% endif %}
+        }
+    }
+    {% endfor %}
+    {% endfor %}
+
+    _get_extra_args(&argc, argv);
+    {# end of parsing, call this function #}
+    {# TODO call also parents? #}
+    {{cmd.callback}}(
+        {# our options #}
+        {% for opt in cmd.options %}
+        {{ cmd.get_fullname() }}_args.{{opt.long}},
+        {% endfor %}
+        {# parents, reverse order #}
+        {% for pcmd in cmd.get_parent_list(True) %}
+        {% for opt in pcmd.options %}
+        {{ pcmd.get_fullname() }}_args.{{opt.long}},
+        {% endfor %}
+        {% endfor %}
+        argc, argv
+    );
+
+    return 0;
+}
+{% endfor %}
+
+int parse(int argc, char**argv)
+{
+    char *copy_argv[argc];
+    for(int i=0;i<argc;i++) {
+        copy_argv[i] = argv[i];
+    }
+
+    return _parse_{{ cmds[0].name }}(argc-1, argv+1);
+}

@@ -1,0 +1,27 @@
+
+#ifndef _{{basename|upper}}_H_
+#define _{{basename|upper}}_H_
+
+{# definition of parser entrypoint #}
+int parse(int argc, char**argv);
+
+{# also define the functions for the handlers #}
+{% for cmd in cmds %}
+{# should it include a type? #}
+int {{cmd.callback}}(
+    {# our options #}
+    {% for opt in cmd.options %}
+    {{ ctype_conversion[opt.ctype.value] }} {{opt.long}},
+    {% endfor %}
+    {# parents, reverse order #}
+    {% for pcmd in cmd.get_parent_list(True) %}
+    {% for opt in pcmd.options %}
+    {{ ctype_conversion[opt.ctype.value] }} {{opt.long}},
+    {% endfor %}
+    {% endfor %}
+    int argc_left,
+    char** argv_len
+);
+{% endfor %}
+
+#endif
