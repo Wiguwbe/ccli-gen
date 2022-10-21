@@ -1,4 +1,6 @@
 
+import pathlib as pl
+
 from dataclasses import dataclass
 from enum import Enum
 
@@ -142,8 +144,9 @@ def _flatten_commands(cmd:Cmd) -> list[Cmd]:
 
 
 def generate(cmd:Cmd, basename:str) -> tuple[str,str]:
+    template_dir = pl.Path(__file__).parent.resolve() / 'templates'
     env = j2.Environment(
-        loader=j2.FileSystemLoader('templates'),
+        loader=j2.FileSystemLoader(template_dir),
         trim_blocks=True, lstrip_blocks=True
     )
 
