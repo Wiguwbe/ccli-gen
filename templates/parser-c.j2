@@ -226,5 +226,5 @@ int parse(int argc, char**argv)
         copy_argv[i] = argv[i];
     }
 
-    return _parse_{{ cmds[0].name }}(argc-1, argv+1);
+    return _parse_{{ cmds[0].cname }}(argc-1, argv+1);
 }

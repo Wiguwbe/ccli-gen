@@ -31,6 +31,9 @@ base_bar_cmd = gen.Cmd(
     parent=base_cmd
 )
 
+#base_hyphen_cmd = gen.Cmd(
+#	"sub-cmd"
+
 base_cmd.sub_cmds.extend([base_foo_cmd, base_bar_cmd])
 
 #c,h = gen.generate([base_cmd, base_foo_cmd, base_bar_cmd])

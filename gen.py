@@ -58,6 +58,7 @@ class Handler:
 class Cmd:
 
     name: str
+    cname: str
     #desc: str
     callback: str
     options: list[Opt]
@@ -66,7 +67,8 @@ class Cmd:
     description: str
 
     def __init__(self, name:str, callback:str = None, options:list[Opt]=None, sub_cmds:list[object]=None, parent:object=None, description:str=None):
-        self.name = name.replace('-', '_')
+        self.name = name
+        self.cname = self.name.replace('-', '_')
         self.callback = callback
         self.options = options if options is not None else []
         self.sub_cmds = sub_cmds if sub_cmds is not None else []
@@ -101,7 +103,7 @@ class Cmd:
         base = ''
         if self.parent is not None:
             base = self.parent.get_fullname() + '_'
-        return base + self.name
+        return base + self.cname
 
     def get_parent_list(self, reversed=False) -> list:
         if self.parent is None:
