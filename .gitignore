@@ -1,6 +1,7 @@
 __pycache__
 generated.*
 a.out
-*.tar
-*.c
 params
+tpl-*
+ccli-*
+*.o
