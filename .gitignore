@@ -5,3 +5,4 @@ params
 tpl-*
 ccli-*
 *.o
+.vscode
